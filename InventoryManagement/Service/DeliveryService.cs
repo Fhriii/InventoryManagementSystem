@@ -20,16 +20,13 @@ namespace WebApplication1.Service
 
         public async Task<DeliveryResponseDto> CreateDelivery(int userId, string requestNumber)
         {
-            // Decode request number
             string decodedString = System.Net.WebUtility.UrlDecode(requestNumber);
 
-            // Cari request
             var request = await _context.RequestOrders
                 .FirstOrDefaultAsync(u => u.RequestNumber == decodedString);
             if (request == null)
                 throw new Exception("Request not found");
 
-            // Generate nomor Delivery dan InventoryOut
             int invOutCount = await _context.InventoryOuts
                 .Where(u => u.DestinationType == "Delivery")
                 .CountAsync();
@@ -47,7 +44,6 @@ namespace WebApplication1.Service
             _context.Deliveries.Add(newDelivery);
             await _context.SaveChangesAsync();
 
-            // Ambil semua item yang diminta
             var requestItems = await _context.RequestOrderDetails
                 .Where(u => u.RequestId == request.RequestId)
                 .ToListAsync();
@@ -56,7 +52,6 @@ namespace WebApplication1.Service
             {
                 int qtyNeeded = reqItem.Quantity;
 
-                // FIFO: ambil dari InventoryIn yang masih ada stok
                 var fifoStocks = await _context.InventoryIns
                     .Where(i => i.ItemId == reqItem.ItemId && i.RemainingQty > 0)
                     .OrderBy(i => i.DateIn)
@@ -82,11 +77,9 @@ namespace WebApplication1.Service
 
                     _context.InventoryOuts.Add(newInvOut);
 
-                    // Kurangi remaining qty di stock FIFO
                     stock.RemainingQty -= takeQty;
                     qtyNeeded -= takeQty;
 
-                    // Update ItemMaster current stock
                     var itemMaster = await _context.ItemMasters
                         .FirstAsync(i => i.ItemId == reqItem.ItemId);
                     itemMaster.CurrentStock -= takeQty;
@@ -98,7 +91,6 @@ namespace WebApplication1.Service
                     throw new Exception($"Stock tidak cukup untuk item ID {reqItem.ItemId}");
             }
 
-            // Ubah status request
             request.Status = "Completed";
 
             await _context.SaveChangesAsync();

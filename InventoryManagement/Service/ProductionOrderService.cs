@@ -23,20 +23,18 @@ public class ProductionService : IProductionOrderService
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            // 1) Validasi FG
+            var itemid = await _context.ItemMasters.FirstOrDefaultAsync(u => u.ItemCode == dto.FinishedGoodCode);
             var fg = await _context.ItemMasters
-                .FirstOrDefaultAsync(i => i.ItemId == dto.FinishedGoodID && i.ItemType == "FinishedGoods");
+                .FirstOrDefaultAsync(i => i.ItemId == itemid.ItemId && i.ItemType == "FinishedGoods");
             if (fg == null) throw new Exception("Finished good tidak ditemukan.");
 
-            // 2) Ambil material: dari DTO kalau ada; kalau kosong, ambil dari BOM
             List<ProductOrderDto.MaterialUsageDto> materials;
             if (dto.Materials == null || !dto.Materials.Any())
             {
                 materials = await _context.BillOfMaterials
-                    .Where(b => b.FinishedGoodId == dto.FinishedGoodID)
+                    .Where(b => b.FinishedGoodId == itemid.ItemId)
                     .Select(b => new ProductOrderDto.MaterialUsageDto
                     {
-                        // BUGFIX: harus RawMaterialId, bukan FinishedGoodId
                         ItemID = b.RawMaterialId,
                         QuantityUsed = b.QuantityRequired * dto.QuantityProduced
                     })
@@ -50,7 +48,6 @@ public class ProductionService : IProductionOrderService
                 materials = dto.Materials;
             }
 
-            // 3) Cek ketersediaan stok per item berdasarkan total RemainingQty (bukan CurrentStock)
             foreach (var m in materials)
             {
                 var available = await _context.InventoryIns
@@ -66,14 +63,13 @@ public class ProductionService : IProductionOrderService
                     throw new Exception($"Stok batch (FIFO) tidak cukup untuk item {itemName}. Butuh {(int)m.QuantityUsed}, tersedia {available}.");
             }
 
-            // 4) Buat Production
             var prodCount = await _context.Productions.CountAsync();
             var prodRef = $"PROD00{prodCount}/{DateTime.Now.Year}";
 
             var prod = new Production
             {
-                ProductionDate = dto.ProductionDate,
-                ProductItemId = dto.FinishedGoodID,
+                ProductionDate = dto.ProductionDate?? DateTime.UtcNow,
+                ProductItemId = itemid.ItemId,
                 QuantityProduced = (int)dto.QuantityProduced,
                 UserId = userId,
                 ReferenceNo = prodRef
@@ -81,12 +77,10 @@ public class ProductionService : IProductionOrderService
             _context.Productions.Add(prod);
             await _context.SaveChangesAsync();
 
-            // 5) Keluarkan bahan baku via FIFO + tulis ProductionMaterialUsage + InventoryOut + InventoryOutDetails
             decimal totalMaterialCost = 0m;
 
             foreach (var m in materials)
             {
-                // Catat usage di tabel produksi
                 _context.ProductionMaterialUsages.Add(new ProductionMaterialUsage
                 {
                     ProductionId = prod.ProductionId,
@@ -94,20 +88,19 @@ public class ProductionService : IProductionOrderService
                     QuantityUsed = (int)m.QuantityUsed
                 });
 
-                // Master InventoryOut (per item)
                 var invOut = new InventoryOut
                 {
                     ItemId = m.ItemID,
                     Quantity = (int)m.QuantityUsed,
-                    DateOut = dto.ProductionDate,
+                    DateOut = dto.ProductionDate ?? DateTime.UtcNow,
                     DestinationType = "Production",
                     UserId = userId,
                     ReferenceNo = prodRef
                 };
                 _context.InventoryOuts.Add(invOut);
-                await _context.SaveChangesAsync(); // perlu untuk dapat InventoryOutId
-
-                // FIFO deplete dari InventoryIn
+                await _context.SaveChangesAsync();
+                
+                
                 var qtyToTake = (int)m.QuantityUsed;
                 var fifoBatches = await _context.InventoryIns
                     .Where(b => b.ItemId == m.ItemID && (b.RemainingQty ?? 0) > 0)
@@ -123,7 +116,6 @@ public class ProductionService : IProductionOrderService
 
                     var take = Math.Min(available, qtyToTake);
 
-                    // Tulis detail out per batch
                     _context.InventoryOutDetails.Add(new InventoryOutDetail
                     {
                         InventoryOutId = invOut.InventoryOutId,
@@ -132,10 +124,8 @@ public class ProductionService : IProductionOrderService
                         UnitCost = batch.UnitCost
                     });
 
-                    // Kurangi remaining di batch
                     batch.RemainingQty = available - take;
 
-                    // Akumulasi biaya
                     totalMaterialCost += (batch.UnitCost * take);
 
                     qtyToTake -= take;
@@ -144,13 +134,10 @@ public class ProductionService : IProductionOrderService
                 if (qtyToTake > 0)
                     throw new Exception($"FIFO error: stok batch untuk ItemID {m.ItemID} berubah saat proses.");
 
-                // Kurangi ringkasan di ItemMaster
                 var item = await _context.ItemMasters.FirstAsync(i => i.ItemId == m.ItemID);
                 item.CurrentStock -= (int)m.QuantityUsed;
             }
 
-            // 6) Masukkan hasil produksi ke InventoryIn (batch baru)
-            // Hitung unit cost FG: biaya bahan / qty produced (fallback ke 0 kalau bagi 0)
             var producedQty = (int)dto.QuantityProduced;
             var fgUnitCost = producedQty > 0 ? Math.Round(totalMaterialCost / producedQty, 2) : 0m;
 
@@ -162,9 +149,9 @@ public class ProductionService : IProductionOrderService
                 ItemId = fg.ItemId,
                 Quantity = producedQty,
                 UnitCost = fgUnitCost,
-                DateIn = dto.ProductionDate,
+                DateIn = dto.ProductionDate ?? DateTime.UtcNow,
                 SourceType = "Production",
-                ReferenceNo = prodRef,          // konsisten dengan constraint kamu
+                ReferenceNo = prodRef,          
                 UserId = userId,
                 BatchNumber = fgBatchNo,
                 RemainingQty = producedQty

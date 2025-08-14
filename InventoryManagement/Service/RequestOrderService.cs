@@ -6,7 +6,7 @@ namespace WebApplication1.Service;
 
 public interface IRequestOrderService
 {
-    Task<int> CreateRequestAsync(RequestOrders.RequestDto dto);
+    Task<int> CreateRequestAsync(RequestOrders.RequestDto dto,int userId);
 }
 
 public class RequestOrderService : IRequestOrderService
@@ -17,14 +17,14 @@ public class RequestOrderService : IRequestOrderService
     {
         _context = context;
     }
-    public async Task<int> CreateRequestAsync(RequestOrders.RequestDto dto)
+    public async Task<int> CreateRequestAsync(RequestOrders.RequestDto dto,int userId)
     {
         var reqcount = await _context.RequestOrders.CountAsync();
         var request = new RequestOrder
         {
             RequestNumber = $"REQ00{reqcount}/{DateTime.Now.Year}",
-            UserId = dto.UserID,
-            RequestDate = dto.RequestDate,
+            UserId = userId,
+            RequestDate = DateTime.UtcNow,
             Status = "Pending",
             CustomerName = dto.CustomerName,
             CustomerPhone = dto.CustomerPhone
@@ -32,12 +32,12 @@ public class RequestOrderService : IRequestOrderService
             
         };
         _context.RequestOrders.Add(request);
-        await _context.SaveChangesAsync();
 
-        if (dto.FinishedGoodID.HasValue)
+        var itemid = await _context.ItemMasters.FirstOrDefaultAsync(u=>u.ItemCode == dto.ItemCode);
+        if (itemid.ItemId != null)
         {
             var bomList = await _context.BillOfMaterials
-                .Where(b => b.FinishedGoodId == dto.FinishedGoodID.Value)
+                .Where(b => b.FinishedGoodId == itemid.ItemId)
                 .ToListAsync();
 
             if (!bomList.Any())
@@ -52,28 +52,29 @@ public class RequestOrderService : IRequestOrderService
 
                 if (item.CurrentStock < totalNeeded)
                     throw new Exception($"Stok {item.ItemName} tidak cukup.");
+                var latestPrice = await _context.InventoryIns
+                    .Where(i => i.ItemId == bom.RawMaterialId)
+                    .OrderByDescending(i => i.InventoryInId) 
+                    .Select(i => i.UnitCost)
+                    .FirstOrDefaultAsync();
 
+               
                 item.CurrentStock -= (int)totalNeeded;
-
                 _context.RequestOrderDetails.Add(new RequestOrderDetail
                 {
                     RequestId = request.RequestId,
                     ItemId = bom.RawMaterialId,
                     Quantity = (int)totalNeeded,
-                    UnitPrice = 100
+                    UnitPrice = latestPrice
                     
                 });
             }
         }
         else
         {
-            var fgItem = await _context.ItemMasters
-                .FirstOrDefaultAsync(i => i.ItemCode == dto.FinishedGoodCode);
-
-            if (fgItem == null)
-            {
+       
                 var itemcount = await _context.ItemMasters.Where(u => u.ItemType == "FinishedGoods").CountAsync();
-                fgItem = new ItemMaster
+                var fgItem = new ItemMaster
                 {
                     ItemCode = $"FG00{itemcount}/{DateTime.Now.Year}",
                     ItemName = dto.FinishedGoodName,
@@ -83,8 +84,8 @@ public class RequestOrderService : IRequestOrderService
                     CreatedAt = DateTime.Now
                 };
                 _context.ItemMasters.Add(fgItem);
-                await _context.SaveChangesAsync();
-            }
+        
+                
 
             foreach (var raw in dto.Items)
             {
@@ -103,7 +104,6 @@ public class RequestOrderService : IRequestOrderService
                         CreatedAt = DateTime.Now
                     };
                     _context.ItemMasters.Add(rawItem);
-                    await _context.SaveChangesAsync();
                 }
 
                 _context.BillOfMaterials.Add(new BillOfMaterial

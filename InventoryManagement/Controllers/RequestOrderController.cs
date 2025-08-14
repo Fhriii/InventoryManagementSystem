@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using WebApplication1.Dto;
 using WebApplication1.Service;
@@ -23,15 +24,9 @@ public class RequestOrderController : ControllerBase
             // === Validasi umum ===
             if (string.IsNullOrWhiteSpace(request.RequestNumber))
                 return BadRequest("RequestNumber wajib diisi.");
-
-            if (request.UserID <= 0)
-                return BadRequest("UserID tidak valid.");
-
-            if (request.RequestDate == default)
-                return BadRequest("RequestDate wajib diisi.");
-
+            
             // === Mode BOM ===
-            if (request.FinishedGoodID.HasValue)
+            if (request.ItemCode != null)
             {
                 if (request.Quantity == null || request.Quantity <= 0)
                     return BadRequest("Quantity wajib diisi jika menggunakan FinishedGoodID.");
@@ -43,7 +38,7 @@ public class RequestOrderController : ControllerBase
             else
             {
                 if (request.Items == null || !request.Items.Any())
-                    return BadRequest("Items wajib diisi jika tidak menggunakan FinishedGoodID.");
+                    return BadRequest("Items wajib diisi jika tidak menggunakan ItemCode.");
 
                 foreach (var item in request.Items)
                 {
@@ -51,11 +46,12 @@ public class RequestOrderController : ControllerBase
                         return BadRequest("ItemCode wajib diisi.");
                     if (item.Quantity <= 0)
                         return BadRequest($"Quantity untuk item {item.ItemCode ?? "(tanpa kode)"} harus lebih dari 0.");
+           
                 }
             }
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
-            // Simpan data
-            var req = await _requestOrderService.CreateRequestAsync(request);
+            var req = await _requestOrderService.CreateRequestAsync(request,userId);
             return Ok(new
             {
                 message = "Add Request Successfuly",

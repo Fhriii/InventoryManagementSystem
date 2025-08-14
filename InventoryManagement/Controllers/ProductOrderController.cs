@@ -26,8 +26,8 @@ public class ProductionOrderController : ControllerBase
             if (dto == null)
                 return BadRequest("Data produksi tidak boleh kosong.");
 
-            if (dto.FinishedGoodID <= 0)
-                return BadRequest("ItemId harus diisi.");
+            if (dto.FinishedGoodCode == null)
+                return BadRequest("FinishedGoodCode harus diisi.");
 
             if (dto.QuantityProduced <= 0)
                 return BadRequest("QuantityProduced harus lebih dari 0.");

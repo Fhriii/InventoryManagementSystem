@@ -5,9 +5,9 @@ public class ProductOrderDto
     
     public class ProductionDto
     {
-        public int FinishedGoodID { get; set; }
+        public string FinishedGoodCode { get; set; }
         public decimal QuantityProduced { get; set; }
-        public DateTime ProductionDate { get; set; }
+        public DateTime? ProductionDate { get; set; }
 
         // Kalau null → berarti pakai BOM existing
         public List<MaterialUsageDto>? Materials { get; set; }

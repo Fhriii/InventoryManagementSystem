@@ -30,18 +30,18 @@ public class PurchaseService : IPurchaseService
             if (user == null)
                 throw new Exception("User tidak ditemukan.");
 
-            // Hitung nomor urut PO
             var poCount = await _context.PurchaseOrders.CountAsync();
             var poNumber = $"PO00{poCount + 1}/{DateTime.Now.Year}";
+            var totalAmount = dto.Items.Sum(i => i.Quantity * i.UnitPrice);
 
             var po = new PurchaseOrder
             {
                 Ponumber = poNumber,
                 SupplierId = dto.SupplierID,
                 UserId = dto.UserID,
-                Podate = dto.PODate,
+                Podate = dto.PODate ?? DateOnly.FromDateTime(DateTime.Now),
                 Status = "Pending",
-                TotalAmount = dto.TotalAmount
+                TotalAmount = totalAmount
             };
             _context.PurchaseOrders.Add(po);
             await _context.SaveChangesAsync();
@@ -51,13 +51,11 @@ public class PurchaseService : IPurchaseService
                 if (item.UnitPrice <= 0)
                     throw new Exception("Price tidak bisa 0, transaksi ditolak.");
 
-                // Cari item di master
                 var existingItem = await _context.ItemMasters
                     .FirstOrDefaultAsync(x => x.ItemCode == item.ItemCode);
 
                 if (existingItem == null)
                 {
-                    // Buat item baru (RawMaterial)
                     var rawCount = await _context.ItemMasters
                         .Where(u => u.ItemType == "RawMaterial")
                         .CountAsync();
@@ -79,17 +77,14 @@ public class PurchaseService : IPurchaseService
                 }
                 else
                 {
-                    // Update stok
                     existingItem.CurrentStock += item.Quantity;
                     await _context.SaveChangesAsync();
                 }
 
-                // Hitung batch number & reference untuk InventoryIn
                 var invCount = await _context.InventoryIns.CountAsync();
                 var batchNumber = $"BATCH{invCount + 1}";
                 var invRefNo = $"PO00{poCount + 1}/{DateTime.Now.Year}";
 
-                // Insert ke InventoryIn
                 var invIn = new InventoryIn
                 {
                     Quantity = item.Quantity,
@@ -99,12 +94,11 @@ public class PurchaseService : IPurchaseService
                     SourceType = "Purchasing",
                     UserId = dto.UserID,
                     BatchNumber = batchNumber,
-                    RemainingQty = item.Quantity, // FIFO: Remaining = qty awal
+                    RemainingQty = item.Quantity, 
                     ItemId = existingItem.ItemId
                 };
                 _context.InventoryIns.Add(invIn);
 
-                // Insert detail PO
                 var poDetail = new PurchaseOrderDetail
                 {
                     PurchaseOrderId = po.PurchaseOrderId,
@@ -133,7 +127,6 @@ public class PurchaseService : IPurchaseService
                 SupplierID = purchaseOrder.SupplierId,
                 UserID = purchaseOrder.UserId,
                 PODate = purchaseOrder.Podate, 
-                TotalAmount = purchaseOrder.TotalAmount,
                 Items = purchaseOrder.PurchaseOrderDetails.Select(d => new Purchase.PurchaseOrderItemDto
                 {
                     ItemCode = d.Item.ItemCode,

@@ -52,7 +52,7 @@ public class AuthController : ControllerBase
             expires:DateTime.UtcNow.AddHours(1),
             signingCredentials:creds
         );
-        return Ok(new JwtSecurityTokenHandler().WriteToken(token));
+        return Ok(new { token =new JwtSecurityTokenHandler().WriteToken(token)}) ;
     }
     [HttpGet("me")]
     [Authorize]

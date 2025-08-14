@@ -165,3 +165,4 @@ D:\PKL-INTEGRAL\Inventaris Manajemen\WebApplication1\InventoryManagement\bin\Deb
 D:\PKL-INTEGRAL\Inventaris Manajemen\WebApplication1\InventoryManagement\bin\Debug\net9.0\Swashbuckle.AspNetCore.Swagger.dll
 D:\PKL-INTEGRAL\Inventaris Manajemen\WebApplication1\InventoryManagement\bin\Debug\net9.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 D:\PKL-INTEGRAL\Inventaris Manajemen\WebApplication1\InventoryManagement\bin\Debug\net9.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+D:\PKL-INTEGRAL\Inventaris Manajemen\WebApplication1\InventoryManagement\obj\Debug\net9.0\InventoryManagement.sourcelink.json

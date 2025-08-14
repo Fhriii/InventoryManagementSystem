@@ -1,0 +1,47 @@
+﻿version: '3.8'
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: inventory_sqlserver
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: YourStrong@Password123
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+  # ASP.NET Core API
+  inventorymanagement:
+    image: inventorymanagement
+    container_name: inventory_api
+    build:
+      context: .
+      dockerfile: InventoryManagement/Dockerfile
+      network: host
+    ports:
+      - "5000:8080"
+      - "5001:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080;https://+:8081
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=InventoryManagementDB;User Id=sa;Password=YourStrong@Password123;TrustServerCertificate=true;
+    depends_on:
+      - sqlserver
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+    driver: local
+
+networks:
+  inventory_network:
+    driver: bridge

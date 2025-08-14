@@ -25,16 +25,20 @@ public class PurchaseService : IPurchaseService
             var supplier = await _context.Suppliers.FindAsync(dto.SupplierID);
             if (supplier == null)
                 throw new Exception("Supplier tidak ditemukan.");
+
             var user = await _context.Users.FindAsync(dto.UserID);
             if (user == null)
                 throw new Exception("User tidak ditemukan.");
-            var PoNumCount = await _context.PurchaseOrders.CountAsync();
+
+            // Hitung nomor urut PO
+            var poCount = await _context.PurchaseOrders.CountAsync();
+            var poNumber = $"PO00{poCount + 1}/{DateTime.Now.Year}";
 
             var po = new PurchaseOrder
             {
-                Ponumber = $"PO00{PoNumCount}/{DateTime.Now.Year}",
+                Ponumber = poNumber,
                 SupplierId = dto.SupplierID,
-                UserId= dto.UserID,
+                UserId = dto.UserID,
                 Podate = dto.PODate,
                 Status = "Pending",
                 TotalAmount = dto.TotalAmount
@@ -42,67 +46,79 @@ public class PurchaseService : IPurchaseService
             _context.PurchaseOrders.Add(po);
             await _context.SaveChangesAsync();
 
-            
             foreach (var item in dto.Items)
             {
+                if (item.UnitPrice <= 0)
+                    throw new Exception("Price tidak bisa 0, transaksi ditolak.");
+
+                // Cari item di master
                 var existingItem = await _context.ItemMasters
                     .FirstOrDefaultAsync(x => x.ItemCode == item.ItemCode);
-                
+
                 if (existingItem == null)
                 {
-                    var itemcount = await _context.ItemMasters.Where(u=>u.ItemType == "RawMaterial").CountAsync();
+                    // Buat item baru (RawMaterial)
+                    var rawCount = await _context.ItemMasters
+                        .Where(u => u.ItemType == "RawMaterial")
+                        .CountAsync();
 
                     existingItem = new ItemMaster
                     {
-                        ItemCode =  $"RM00{itemcount}/{DateTime.Now.Year}",
+                        ItemCode = $"RM00{rawCount + 1}/{DateTime.Now.Year}",
                         ItemName = item.ItemName,
                         ItemType = "RawMaterial",
                         Unit = item.Unit,
                         CurrentStock = item.Quantity,
-           
-                        CreatedAt = DateTime.Now
+                        CreatedAt = DateTime.Now,
+                        MinStock = item.MinStock ?? 0,
+                        Description = item.Description
                     };
-                    if (item.MinStock.HasValue)
-                        existingItem.MinStock = item.MinStock.Value;
 
-                    if (!string.IsNullOrEmpty(item.Description))
-                        existingItem.Description = item.Description;
                     _context.ItemMasters.Add(existingItem);
                     await _context.SaveChangesAsync();
                 }
                 else
                 {
+                    // Update stok
                     existingItem.CurrentStock += item.Quantity;
                     await _context.SaveChangesAsync();
-
                 }
 
-                var totalinv =await _context.InventoryIns.Where(u=>u.SourceType == "Purchasing").CountAsync(); 
+                // Hitung batch number & reference untuk InventoryIn
+                var invCount = await _context.InventoryIns.CountAsync();
+                var batchNumber = $"BATCH{invCount + 1}";
+                var invRefNo = $"PO00{poCount + 1}/{DateTime.Now.Year}";
+
+                // Insert ke InventoryIn
                 var invIn = new InventoryIn
                 {
                     Quantity = item.Quantity,
-                    UnitCost =  item.UnitPrice,
+                    UnitCost = item.UnitPrice,
                     DateIn = DateTime.Today,
-                    ReferenceNo = $"PO{totalinv}/{DateTime.Now.Year}",
+                    ReferenceNo = invRefNo,
                     SourceType = "Purchasing",
                     UserId = dto.UserID,
-                    BatchNumber = $"BATCH{totalinv}",
-                    RemainingQty = item.Quantity
+                    BatchNumber = batchNumber,
+                    RemainingQty = item.Quantity, // FIFO: Remaining = qty awal
+                    ItemId = existingItem.ItemId
                 };
-                var poDetail = new PurchaseOrderDetail()
+                _context.InventoryIns.Add(invIn);
+
+                // Insert detail PO
+                var poDetail = new PurchaseOrderDetail
                 {
                     PurchaseOrderId = po.PurchaseOrderId,
-                    ItemId= existingItem.ItemId,
+                    ItemId = existingItem.ItemId,
                     Quantity = item.Quantity,
                     UnitPrice = item.UnitPrice
                 };
                 _context.PurchaseOrderDetails.Add(poDetail);
-                _context.InventoryIns.Add(invIn);
             }
 
             await _context.SaveChangesAsync();
             return po.PurchaseOrderId;
         }
+
 
         public async Task<Purchase.PurchaseOrderDto> GetPurchaseOrderAsync(int purchaseOrderId)
         {

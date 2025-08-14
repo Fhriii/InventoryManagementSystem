@@ -37,6 +37,7 @@ builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddScoped<IRequestOrderService,RequestOrderService>();
 builder.Services.AddScoped<IItemMasterService,ItemMasterService>();
 builder.Services.AddScoped<IProductionOrderService,ProductionService>();
+builder.Services.AddScoped<IDeliveryService,DeliveryService>();
 
 
 builder.Services.AddSwaggerGen(s =>

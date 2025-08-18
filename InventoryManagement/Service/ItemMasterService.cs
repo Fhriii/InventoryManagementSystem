@@ -28,8 +28,7 @@ public class ItemMasterService : IItemMasterService
                 ItemName = u.ItemName,
                 ItemType = u.ItemType,
                 Description = u.Description,
-                CurrentStock = u.CurrentStock,
-                MinStock = u.MinStock,
+           
                 Unit = u.Unit
             })
             .ToListAsync();
@@ -74,10 +73,8 @@ public class ItemMasterService : IItemMasterService
         {
             ItemCode = dto.ItemCode.Trim(),
             ItemName = dto.ItemName.Trim(),
-            CurrentStock = dto.CurrentStock,
             Description = dto.Description,
             ItemType = dto.ItemType,
-            MinStock = dto.MinStock,
             Unit = dto.Unit.Trim(),
             CreatedAt = DateTime.UtcNow
         };
@@ -88,11 +85,9 @@ public class ItemMasterService : IItemMasterService
         return new ItemMasterDto
         {
             ItemCode = newItem.ItemCode,
-            ItemName = newItem.ItemName,
-            CurrentStock = newItem.CurrentStock,
+            ItemName = newItem.ItemName, 
             Description = newItem.Description,
             ItemType = newItem.ItemType,
-            MinStock = newItem.MinStock,
             Unit = newItem.Unit
         };
     }

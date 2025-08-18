@@ -8,7 +8,9 @@ namespace WebApplication1.Service
     {
         Task<DeliveryResponseDto> CreateDelivery(int userId, string requestNumber);
     }
-
+/// <summary>
+/// Tabel Inventory belum terupdate,,quantity yang di delivery malah yang bahan, 
+/// </summary>
     public class DeliveryService : IDeliveryService
     {
         private readonly InventoryManagementContext _context;
@@ -52,10 +54,10 @@ namespace WebApplication1.Service
             {
                 int qtyNeeded = reqItem.Quantity;
 
-                var fifoStocks = await _context.InventoryIns
-                    .Where(i => i.ItemId == reqItem.ItemId && i.RemainingQty > 0)
+                var fifoStocks = await _context.Inventories
+                    .Where(i => i.ItemId == reqItem.ItemId && i.Quantity > 0)
                     .OrderBy(i => i.DateIn)
-                    .ThenBy(i => i.InventoryInId)
+                    .ThenBy(i => i.InventoryId)
                     .ToListAsync();
 
                 foreach (var stock in fifoStocks)
@@ -63,26 +65,22 @@ namespace WebApplication1.Service
                     if (qtyNeeded <= 0)
                         break;
 
-                    int takeQty = Math.Min((int)stock.RemainingQty, qtyNeeded);
-
+                    int takeQty = Math.Min((int)stock.Quantity, qtyNeeded);
+                    
                     var newInvOut = new InventoryOut
                     {
                         UserId = userId,
                         DateOut = DateTime.Now,
                         DestinationType = "Delivery",
-                        ItemId = reqItem.ItemId,
-                        Quantity = takeQty,
+                        QuantityUsed = takeQty,
                         ReferenceNo = $"DEL00{invOutCount}/{DateTime.Now.Year}",
                     };
 
                     _context.InventoryOuts.Add(newInvOut);
 
-                    stock.RemainingQty -= takeQty;
+                    stock.Quantity -= takeQty;
+                    stock.UpdateAt = DateTime.Now;
                     qtyNeeded -= takeQty;
-
-                    var itemMaster = await _context.ItemMasters
-                        .FirstAsync(i => i.ItemId == reqItem.ItemId);
-                    itemMaster.CurrentStock -= takeQty;
 
                     invOutCount++;
                 }

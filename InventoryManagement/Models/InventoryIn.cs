@@ -7,27 +7,23 @@ public partial class InventoryIn
 {
     public int InventoryInId { get; set; }
 
-    public int ItemId { get; set; }
-
-    public int Quantity { get; set; }
-
-    public decimal UnitCost { get; set; }
-
-    public DateTime DateIn { get; set; }
+    public DateTime? CreatedAt { get; set; }
 
     public string SourceType { get; set; } = null!;
 
+    public int? ItemId { get; set; }
+
+    public decimal? UnitCost { get; set; }
+
+    public decimal? TotalAmount { get; set; }
+
     public string? ReferenceNo { get; set; }
+
+    public decimal Quantity { get; set; }
 
     public int UserId { get; set; }
 
-    public string? BatchNumber { get; set; }
-
-    public int? RemainingQty { get; set; }
-
-    public virtual ICollection<InventoryOutDetail> InventoryOutDetails { get; set; } = new List<InventoryOutDetail>();
-
-    public virtual ItemMaster Item { get; set; } = null!;
+    public virtual ItemMaster? Item { get; set; }
 
     public virtual User User { get; set; } = null!;
 }

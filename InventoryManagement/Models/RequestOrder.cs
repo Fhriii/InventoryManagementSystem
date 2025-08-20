@@ -19,7 +19,13 @@ public partial class RequestOrder
 
     public int UserId { get; set; }
 
+    public decimal Quantity { get; set; }
+
+    public int ItemId { get; set; }
+
     public virtual ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
+
+    public virtual ItemMaster? Item { get; set; }
 
     public virtual ICollection<RequestOrderDetail> RequestOrderDetails { get; set; } = new List<RequestOrderDetail>();
 

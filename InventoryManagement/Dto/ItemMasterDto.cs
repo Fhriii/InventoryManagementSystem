@@ -14,7 +14,7 @@ public class ItemMasterDto
 
     public int? CurrentStock { get; set; }
 
-    public int? MinStock { get; set; }
+    public int MinStock { get; set; }
 
     public string? Description { get; set; }
     

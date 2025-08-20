@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -27,12 +28,43 @@ public class PurchaseOrderController : ControllerBase
 
         try
         {
-            var poId = await _purchaseService.CreatePurchaseOrderAsync(dto);
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+
+            var poId = await _purchaseService.CreatePurchaseOrderAsync(dto,userId);
             return Ok(new 
             { 
                 Message = "Purchase Order berhasil dibuat.", 
                 PurchaseOrderID = poId 
             });
+        }
+        catch (DbUpdateException ex)
+        {
+            return BadRequest(new 
+            { 
+                error = ex.Message, 
+                inner = GetFullErrorText(ex) 
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new 
+            { 
+                error = ex.Message, 
+                inner = ex.InnerException?.Message 
+            });
+        }
+    }
+    
+    [HttpPost("ItemExist")]
+    [Authorize]
+    public async Task<IActionResult> CreatePurchaseItemExist([FromBody] Purchase.PurchaseOrderExist dto)
+    {
+        try
+        {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+
+            var purchase = await _purchaseService.CreatePurchaseOrderItemExistAsync(dto, userId);
+            return Ok(purchase);
         }
         catch (DbUpdateException ex)
         {

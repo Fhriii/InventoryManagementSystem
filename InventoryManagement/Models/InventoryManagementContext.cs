@@ -19,11 +19,11 @@ public partial class InventoryManagementContext : DbContext
 
     public virtual DbSet<Delivery> Deliveries { get; set; }
 
+    public virtual DbSet<Inventory> Inventories { get; set; }
+
     public virtual DbSet<InventoryIn> InventoryIns { get; set; }
 
     public virtual DbSet<InventoryOut> InventoryOuts { get; set; }
-
-    public virtual DbSet<InventoryOutDetail> InventoryOutDetails { get; set; }
 
     public virtual DbSet<ItemMaster> ItemMasters { get; set; }
 
@@ -45,7 +45,7 @@ public partial class InventoryManagementContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=localhost,1433;Database=InventoryManagement;User Id=sa;Password=Fahri@2024!;TrustServerCertificate=true;");
+        => optionsBuilder.UseSqlServer("Server=.;Database=InventoryManagement;User=sa;Password=Fahri@2024!;Trusted_Connection=True;TrustServerCertificate=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,6 +95,22 @@ public partial class InventoryManagementContext : DbContext
                 .HasConstraintName("FK__Deliverie__UserI__74AE54BC");
         });
 
+        modelBuilder.Entity<Inventory>(entity =>
+        {
+            entity.ToTable("Inventory");
+
+            entity.Property(e => e.BatchNumber)
+                .HasMaxLength(10)
+                .IsFixedLength();
+            entity.Property(e => e.DateIn).HasColumnType("datetime");
+            entity.Property(e => e.UnitCost).HasColumnType("decimal(18, 0)");
+            entity.Property(e => e.UpdateAt).HasColumnType("datetime");
+
+            entity.HasOne(d => d.Item).WithMany(p => p.Inventories)
+                .HasForeignKey(d => d.ItemId)
+                .HasConstraintName("FK_Inventory_ItemMaster");
+        });
+
         modelBuilder.Entity<InventoryIn>(entity =>
         {
             entity.HasKey(e => e.InventoryInId).HasName("PK__Inventor__BDF1FDD010263427");
@@ -102,17 +118,16 @@ public partial class InventoryManagementContext : DbContext
             entity.ToTable("InventoryIn");
 
             entity.Property(e => e.InventoryInId).HasColumnName("InventoryInID");
-            entity.Property(e => e.BatchNumber).HasMaxLength(50);
-            entity.Property(e => e.ItemId).HasColumnName("ItemID");
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime");
             entity.Property(e => e.ReferenceNo).HasMaxLength(50);
             entity.Property(e => e.SourceType).HasMaxLength(20);
-            entity.Property(e => e.UnitCost).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.TotalAmount).HasColumnType("decimal(18, 0)");
+            entity.Property(e => e.UnitCost).HasColumnType("decimal(18, 0)");
             entity.Property(e => e.UserId).HasColumnName("UserID");
 
             entity.HasOne(d => d.Item).WithMany(p => p.InventoryIns)
                 .HasForeignKey(d => d.ItemId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Inventory__ItemI__534D60F1");
+                .HasConstraintName("FK_InventoryIn_ItemMaster");
 
             entity.HasOne(d => d.User).WithMany(p => p.InventoryIns)
                 .HasForeignKey(d => d.UserId)
@@ -128,39 +143,18 @@ public partial class InventoryManagementContext : DbContext
 
             entity.Property(e => e.InventoryOutId).HasColumnName("InventoryOutID");
             entity.Property(e => e.DestinationType).HasMaxLength(20);
-            entity.Property(e => e.ItemId).HasColumnName("ItemID");
             entity.Property(e => e.ReferenceNo).HasMaxLength(50);
+            entity.Property(e => e.UnitCost).HasColumnType("decimal(18, 0)");
             entity.Property(e => e.UserId).HasColumnName("UserID");
 
-            entity.HasOne(d => d.Item).WithMany(p => p.InventoryOuts)
-                .HasForeignKey(d => d.ItemId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Inventory__ItemI__5812160E");
+            entity.HasOne(d => d.Inventory).WithMany(p => p.InventoryOuts)
+                .HasForeignKey(d => d.InventoryId)
+                .HasConstraintName("FK_InventoryOut_Inventory");
 
             entity.HasOne(d => d.User).WithMany(p => p.InventoryOuts)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Inventory__UserI__59063A47");
-        });
-
-        modelBuilder.Entity<InventoryOutDetail>(entity =>
-        {
-            entity.HasKey(e => e.OutDetailId).HasName("PK__Inventor__5DCB8021AADBEBDA");
-
-            entity.Property(e => e.OutDetailId).HasColumnName("OutDetailID");
-            entity.Property(e => e.InventoryInId).HasColumnName("InventoryInID");
-            entity.Property(e => e.InventoryOutId).HasColumnName("InventoryOutID");
-            entity.Property(e => e.UnitCost).HasColumnType("decimal(18, 2)");
-
-            entity.HasOne(d => d.InventoryIn).WithMany(p => p.InventoryOutDetails)
-                .HasForeignKey(d => d.InventoryInId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Inventory__Inven__02FC7413");
-
-            entity.HasOne(d => d.InventoryOut).WithMany(p => p.InventoryOutDetails)
-                .HasForeignKey(d => d.InventoryOutId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Inventory__Inven__02084FDA");
         });
 
         modelBuilder.Entity<ItemMaster>(entity =>
@@ -173,12 +167,10 @@ public partial class InventoryManagementContext : DbContext
 
             entity.Property(e => e.ItemId).HasColumnName("ItemID");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
-            entity.Property(e => e.CurrentStock).HasDefaultValue(0);
             entity.Property(e => e.Description).HasColumnType("ntext");
             entity.Property(e => e.ItemCode).HasMaxLength(50);
             entity.Property(e => e.ItemName).HasMaxLength(100);
             entity.Property(e => e.ItemType).HasMaxLength(20);
-            entity.Property(e => e.MinStock).HasDefaultValue(0);
             entity.Property(e => e.Unit).HasMaxLength(20);
         });
 
@@ -291,6 +283,10 @@ public partial class InventoryManagementContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Pending");
             entity.Property(e => e.UserId).HasColumnName("UserID");
+
+            entity.HasOne(d => d.Item).WithMany(p => p.RequestOrders)
+                .HasForeignKey(d => d.ItemId)
+                .HasConstraintName("FK_RequestOrders_ItemMaster");
 
             entity.HasOne(d => d.User).WithMany(p => p.RequestOrders)
                 .HasForeignKey(d => d.UserId)

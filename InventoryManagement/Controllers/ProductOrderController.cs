@@ -17,26 +17,18 @@ public class ProductionOrderController : ControllerBase
         _productionOrderService =  productionOrderService;
     }
     
-    [HttpPost]
+    [HttpPost("{requestCode}")]
     [Authorize]
-    public async Task<IActionResult> AddProduction([FromBody] ProductOrderDto.ProductionDto dto)
+    public async Task<IActionResult> AddProduction(string requestCode)
     {
         try
         {
-            if (dto == null)
-                return BadRequest("Data produksi tidak boleh kosong.");
-
-            if (dto.FinishedGoodCode == null)
-                return BadRequest("FinishedGoodCode harus diisi.");
-
-            if (dto.QuantityProduced <= 0)
-                return BadRequest("QuantityProduced harus lebih dari 0.");
-
-            if (dto.ProductionDate == default)
-                return BadRequest("Tanggal produksi tidak valid.");
+        
+            if (requestCode == null)
+                return BadRequest("Request code tidak valid.");
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
-            var prod = await _productionOrderService.CreateProductionAsync(dto,userId);
+            var prod = await _productionOrderService.CreateProductionAsync(requestCode,userId);
             return Ok(prod);
         }
         catch (Exception e)

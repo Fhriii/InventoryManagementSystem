@@ -6,9 +6,8 @@ namespace WebApplication1.Service;
 
 public interface IProductionOrderService
 {
-    Task<ProductOrderDto.ProductionResultDto> CreateProductionAsync(ProductOrderDto.ProductionDto dto, int userId);
+    Task<ProductOrderDto.ProductionResultDto> CreateProductionAsync(string requestCode, int userId);
 }
-
 public class ProductionService : IProductionOrderService
 {
     private readonly InventoryManagementContext _context;
@@ -18,63 +17,70 @@ public class ProductionService : IProductionOrderService
         _context = context;
     }
 
-    public async Task<ProductOrderDto.ProductionResultDto> CreateProductionAsync(ProductOrderDto.ProductionDto dto, int userId)
+    public async Task<ProductOrderDto.ProductionResultDto> CreateProductionAsync(string requestCode, int userId)
     {
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            var itemid = await _context.ItemMasters.FirstOrDefaultAsync(u => u.ItemCode == dto.FinishedGoodCode);
-            var fg = await _context.ItemMasters
-                .FirstOrDefaultAsync(i => i.ItemId == itemid.ItemId && i.ItemType == "FinishedGoods");
+            string requestNumber = System.Net.WebUtility.UrlDecode(requestCode);
+            var requestOrder = await _context.RequestOrders.FirstOrDefaultAsync(u => u.RequestNumber == requestNumber);
+            if (requestOrder == null)
+            {
+                throw new Exception($"RequestOrder with code {requestNumber} not found");
+            }
+
+            if (requestOrder.Status == "InProduction" || requestOrder.Status == "Completed")
+            {
+                throw new Exception($"RequestOrder with code {requestNumber} was in Production or Completed");
+
+            }
+
+            int itemid = requestOrder.ItemId;
+            var fg = await _context.ItemMasters.Include(u => u.Inventories)
+                .FirstOrDefaultAsync(i => i.ItemId == itemid && i.ItemType == "FinishedGoods");
             if (fg == null) throw new Exception("Finished good tidak ditemukan.");
 
-            List<ProductOrderDto.MaterialUsageDto> materials;
-            if (dto.Materials == null || !dto.Materials.Any())
-            {
-                materials = await _context.BillOfMaterials
-                    .Where(b => b.FinishedGoodId == itemid.ItemId)
-                    .Select(b => new ProductOrderDto.MaterialUsageDto
-                    {
-                        ItemID = b.RawMaterialId,
-                        QuantityUsed = b.QuantityRequired * dto.QuantityProduced
-                    })
-                    .ToListAsync();
+            var materials = await _context.BillOfMaterials
+                .Where(b => b.FinishedGoodId == itemid)
+                .Select(b => new ProductOrderDto.MaterialUsageDto
+                {
+                    ItemID = b.RawMaterialId,
+                    QuantityUsed = b.QuantityRequired * requestOrder.Quantity
+                })
+                .ToListAsync();
 
-                if (!materials.Any())
-                    throw new Exception("BOM untuk produk ini belum ada.");
-            }
-            else
-            {
-                materials = dto.Materials;
-            }
+            if (!materials.Any())
+                throw new Exception("BOM untuk produk ini belum ada.");
 
             foreach (var m in materials)
             {
-                var available = await _context.InventoryIns
-                    .Where(x => x.ItemId == m.ItemID && (x.RemainingQty ?? 0) > 0)
-                    .SumAsync(x => (int?)x.RemainingQty) ?? 0;
+                var available = await _context.Inventories
+                    .Where(x => x.ItemId == m.ItemID && (x.Quantity ?? 0) > 0)
+                    .SumAsync(x => x.Quantity) ?? 0;
 
                 var itemName = await _context.ItemMasters
                     .Where(i => i.ItemId == m.ItemID)
                     .Select(i => i.ItemName)
                     .FirstOrDefaultAsync() ?? m.ItemID.ToString();
 
-                if (available < (int)m.QuantityUsed)
-                    throw new Exception($"Stok batch (FIFO) tidak cukup untuk item {itemName}. Butuh {(int)m.QuantityUsed}, tersedia {available}.");
+                if (available < m.QuantityUsed)
+                    throw new Exception($"Stok tidak cukup untuk item {itemName}. Butuh {m.QuantityUsed}, tersedia {available}.");
             }
 
             var prodCount = await _context.Productions.CountAsync();
-            var prodRef = $"PROD00{prodCount}/{DateTime.Now.Year}";
+            var prodRef = $"PROD00{prodCount + 1}/{DateTime.Now.Year}";
+            var currentTime = DateTime.Now;
 
             var prod = new Production
             {
-                ProductionDate = dto.ProductionDate?? DateTime.UtcNow,
-                ProductItemId = itemid.ItemId,
-                QuantityProduced = (int)dto.QuantityProduced,
+                ProductionDate = currentTime,
+                ProductItemId = itemid,
+                QuantityProduced = requestOrder.Quantity,
                 UserId = userId,
                 ReferenceNo = prodRef
             };
             _context.Productions.Add(prod);
+            requestOrder.Status = "InProduction";
             await _context.SaveChangesAsync();
 
             decimal totalMaterialCost = 0m;
@@ -85,87 +91,97 @@ public class ProductionService : IProductionOrderService
                 {
                     ProductionId = prod.ProductionId,
                     RawMaterialItemId = m.ItemID,
-                    QuantityUsed = (int)m.QuantityUsed
+                    QuantityUsed = m.QuantityUsed
                 });
 
-                var invOut = new InventoryOut
-                {
-                    ItemId = m.ItemID,
-                    Quantity = (int)m.QuantityUsed,
-                    DateOut = dto.ProductionDate ?? DateTime.UtcNow,
-                    DestinationType = "Production",
-                    UserId = userId,
-                    ReferenceNo = prodRef
-                };
-                _context.InventoryOuts.Add(invOut);
-                await _context.SaveChangesAsync();
-                
-                
-                var qtyToTake = (int)m.QuantityUsed;
-                var fifoBatches = await _context.InventoryIns
-                    .Where(b => b.ItemId == m.ItemID && (b.RemainingQty ?? 0) > 0)
+                var qtyToTake = m.QuantityUsed;
+                var fifoBatches = await _context.Inventories
+                    .Where(b => b.ItemId == m.ItemID && (b.Quantity ?? 0) > 0)
                     .OrderBy(b => b.DateIn)
-                    .ThenBy(b => b.InventoryInId)
+                    .ThenBy(b => b.InventoryId)
                     .ToListAsync();
+
+                decimal materialCostForThisItem = 0m;
 
                 foreach (var batch in fifoBatches)
                 {
                     if (qtyToTake <= 0) break;
-                    var available = batch.RemainingQty ?? 0;
+                    var available = batch.Quantity ?? 0;
                     if (available <= 0) continue;
 
-                    var take = Math.Min(available, qtyToTake);
+                    var take = Math.Min((decimal)available, qtyToTake);
 
-                    _context.InventoryOutDetails.Add(new InventoryOutDetail
-                    {
-                        InventoryOutId = invOut.InventoryOutId,
-                        InventoryInId = batch.InventoryInId,
-                        QuantityUsed = take,
-                        UnitCost = batch.UnitCost
-                    });
+                    batch.Quantity = available - take;
+                    batch.UpdateAt = currentTime;
 
-                    batch.RemainingQty = available - take;
-
-                    totalMaterialCost += (batch.UnitCost * take);
-
+                    var unitCost = batch.UnitCost ?? 0;
+                    materialCostForThisItem += unitCost * take;
                     qtyToTake -= take;
+
+                    var invOut = new InventoryOut
+                    {
+                        InventoryId = batch.InventoryId, 
+                        QuantityUsed = take,
+                        DateOut = currentTime,
+                        DestinationType = "Production",
+                        UserId = userId,
+                        ReferenceNo = prodRef,
+                        UnitCost = unitCost
+                    };
+                    _context.InventoryOuts.Add(invOut);
                 }
 
                 if (qtyToTake > 0)
-                    throw new Exception($"FIFO error: stok batch untuk ItemID {m.ItemID} berubah saat proses.");
+                    throw new Exception($"FIFO error: stok tidak cukup untuk ItemID {m.ItemID}");
 
-                var item = await _context.ItemMasters.FirstAsync(i => i.ItemId == m.ItemID);
-                item.CurrentStock -= (int)m.QuantityUsed;
+                totalMaterialCost += materialCostForThisItem;
             }
 
-            var producedQty = (int)dto.QuantityProduced;
-            var fgUnitCost = producedQty > 0 ? Math.Round(totalMaterialCost / producedQty, 2) : 0m;
 
-            var invInCount = await _context.InventoryIns.Where(u => u.SourceType == "Production").CountAsync();
-            var fgBatchNo = $"BATCH-{fg.ItemCode}-{DateTime.Now:yyyyMMddHHmmss}";
+            var producedQty = requestOrder.Quantity;
+            var fgUnitCost = producedQty > 0 ? Math.Round(totalMaterialCost / producedQty, 2) : 0m;
 
             var fgIn = new InventoryIn
             {
                 ItemId = fg.ItemId,
                 Quantity = producedQty,
                 UnitCost = fgUnitCost,
-                DateIn = dto.ProductionDate ?? DateTime.UtcNow,
+                CreatedAt = currentTime,
                 SourceType = "Production",
-                ReferenceNo = prodRef,          
+                ReferenceNo = prodRef,
                 UserId = userId,
-                BatchNumber = fgBatchNo,
-                RemainingQty = producedQty
+                TotalAmount = fgUnitCost * producedQty
             };
             _context.InventoryIns.Add(fgIn);
 
-            fg.CurrentStock += producedQty;
+            var existingFgInventory = await _context.Inventories
+                .FirstOrDefaultAsync(i => i.ItemId == fg.ItemId);
+
+            if (existingFgInventory != null)
+            {
+                existingFgInventory.Quantity = (existingFgInventory.Quantity ?? 0) + producedQty;
+                existingFgInventory.UpdateAt = currentTime;
+            }
+            else
+            {
+                var fgInventory = new Inventory
+                {
+                    ItemId = fg.ItemId,
+                    Quantity = producedQty,
+                    UnitCost = fgUnitCost,
+                    BatchNumber = $"BATCH-{fg.ItemCode}-{DateTime.Now:yyyyMMddHHmmss}",
+                    DateIn = currentTime,
+                    UpdateAt = currentTime
+                };
+                _context.Inventories.Add(fgInventory);
+            }
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
             return new ProductOrderDto.ProductionResultDto
             {
-                ProductionId = prod.ProductionId,
+                ProductionCode = prod.ReferenceNo,
                 ProductionDate = prod.ProductionDate,
                 ProductItemId = prod.ProductItemId,
                 ProductItemName = fg.ItemName,

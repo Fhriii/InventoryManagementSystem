@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebApplication1.Dto;
 using WebApplication1.Service;
@@ -17,37 +18,21 @@ public class RequestOrderController : ControllerBase
     }
     
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> AddRequest(RequestOrders.RequestDto request)
     {
         try
         {
-            // === Validasi umum ===
-            if (string.IsNullOrWhiteSpace(request.RequestNumber))
-                return BadRequest("RequestNumber wajib diisi.");
-            
-            // === Mode BOM ===
-            if (request.ItemCode != null)
-            {
-                if (request.Quantity == null || request.Quantity <= 0)
-                    return BadRequest("Quantity wajib diisi jika menggunakan FinishedGoodID.");
+            if (request.Items == null || !request.Items.Any())
+                return BadRequest("Items wajib diisi jika tidak menggunakan ItemCode.");
 
-                if (request.Items != null && request.Items.Any())
-                    return BadRequest("Items tidak boleh diisi jika menggunakan FinishedGoodID.");
-            }
-            // === Mode manual ===
-            else
+            foreach (var item in request.Items)
             {
-                if (request.Items == null || !request.Items.Any())
-                    return BadRequest("Items wajib diisi jika tidak menggunakan ItemCode.");
-
-                foreach (var item in request.Items)
-                {
-                    if (string.IsNullOrWhiteSpace(item.ItemCode))
-                        return BadRequest("ItemCode wajib diisi.");
-                    if (item.Quantity <= 0)
-                        return BadRequest($"Quantity untuk item {item.ItemCode ?? "(tanpa kode)"} harus lebih dari 0.");
-           
-                }
+                if (string.IsNullOrWhiteSpace(item.ItemCode))
+                    return BadRequest("ItemCode wajib diisi.");
+                if (item.Quantity <= 0)
+                    return BadRequest($"Quantity untuk item {item.ItemCode ?? "(tanpa kode)"} harus lebih dari 0.");
+       
             }
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
@@ -64,7 +49,62 @@ public class RequestOrderController : ControllerBase
             if (e.InnerException != null)
                 errorMessage += " | Inner: " + e.InnerException.Message;
 
-            return BadRequest(errorMessage);        }
+            return BadRequest(errorMessage);
+            
+        }
     }
 
+    [HttpPost("ItemExist")]
+    [Authorize]
+    public async Task<IActionResult> AddRequestExistItem([FromBody] RequestOrders.RequestOrderItemExist dto)
+    {
+        try
+        {
+          
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+
+            var req = await _requestOrderService.CreateRequestExistAsync(dto,userId);
+            return Ok(new
+            {
+                message = "Add Request Successfuly",
+                RequestId = req
+            });
+        }
+        catch (Exception e)
+        {
+            var errorMessage = e.Message;
+            if (e.InnerException != null)
+                errorMessage += " | Inner: " + e.InnerException.Message;
+
+            return BadRequest(errorMessage);
+            
+        }
+    }
+
+    [HttpPost("CancelRequest/{requestCode}")]
+    [Authorize]
+    public async Task<IActionResult> CancelRequest(string requestCode)
+    {
+        try
+        {
+          
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+
+            var req = await _requestOrderService.UpdateStatusRequest(requestCode);
+            return Ok(new
+            {
+                message = "Cancel Request Successfuly",
+                RequestId = req
+            });
+        }
+        catch (Exception e)
+        {
+            var errorMessage = e.Message;
+            if (e.InnerException != null)
+                errorMessage += " | Inner: " + e.InnerException.Message;
+
+            return BadRequest(errorMessage);
+            
+        }
+    }
 }

@@ -11,7 +11,7 @@ public partial class Production
 
     public int ProductItemId { get; set; }
 
-    public int QuantityProduced { get; set; }
+    public decimal QuantityProduced { get; set; }
 
     public string? ReferenceNo { get; set; }
 

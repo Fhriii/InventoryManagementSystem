@@ -12,5 +12,4 @@ public class DeliveryResponseDto
 
     public string? DeliveryStatus { get; set; }
     
-    public virtual RequestOrder Request { get; set; } = null!;
 }

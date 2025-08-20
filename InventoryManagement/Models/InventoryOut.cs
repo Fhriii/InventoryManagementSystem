@@ -7,9 +7,11 @@ public partial class InventoryOut
 {
     public int InventoryOutId { get; set; }
 
-    public int ItemId { get; set; }
+    public int? InventoryId { get; set; }
 
-    public int Quantity { get; set; }
+    public decimal? UnitCost { get; set; }
+
+    public decimal QuantityUsed { get; set; }
 
     public DateTime DateOut { get; set; }
 
@@ -19,9 +21,7 @@ public partial class InventoryOut
 
     public int UserId { get; set; }
 
-    public virtual ICollection<InventoryOutDetail> InventoryOutDetails { get; set; } = new List<InventoryOutDetail>();
-
-    public virtual ItemMaster Item { get; set; } = null!;
+    public virtual Inventory? Inventory { get; set; }
 
     public virtual User User { get; set; } = null!;
 }

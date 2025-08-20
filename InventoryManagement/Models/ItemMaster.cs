@@ -15,10 +15,6 @@ public partial class ItemMaster
 
     public string Unit { get; set; } = null!;
 
-    public int? CurrentStock { get; set; }
-
-    public int? MinStock { get; set; }
-
     public string? Description { get; set; }
 
     public DateTime? CreatedAt { get; set; }
@@ -27,9 +23,9 @@ public partial class ItemMaster
 
     public virtual ICollection<BillOfMaterial> BillOfMaterialRawMaterials { get; set; } = new List<BillOfMaterial>();
 
-    public virtual ICollection<InventoryIn> InventoryIns { get; set; } = new List<InventoryIn>();
+    public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
 
-    public virtual ICollection<InventoryOut> InventoryOuts { get; set; } = new List<InventoryOut>();
+    public virtual ICollection<InventoryIn> InventoryIns { get; set; } = new List<InventoryIn>();
 
     public virtual ICollection<ProductionMaterialUsage> ProductionMaterialUsages { get; set; } = new List<ProductionMaterialUsage>();
 
@@ -38,4 +34,6 @@ public partial class ItemMaster
     public virtual ICollection<PurchaseOrderDetail> PurchaseOrderDetails { get; set; } = new List<PurchaseOrderDetail>();
 
     public virtual ICollection<RequestOrderDetail> RequestOrderDetails { get; set; } = new List<RequestOrderDetail>();
+
+    public virtual ICollection<RequestOrder> RequestOrders { get; set; } = new List<RequestOrder>();
 }

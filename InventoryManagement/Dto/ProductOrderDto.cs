@@ -23,7 +23,7 @@ public class ProductOrderDto
         public DateTime ProductionDate { get; set; }
         public int ProductItemId { get; set; }
         public string ProductItemName { get; set; }
-        public int QuantityProduced { get; set; }
+        public decimal QuantityProduced { get; set; }
     }
 
 

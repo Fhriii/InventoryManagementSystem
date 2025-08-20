@@ -30,5 +30,31 @@ public class DeliveryController : ControllerBase
         {
             return BadRequest(e.Message);
         }
-    }   
+    }  
+    
+    [HttpPost("UpdateStatus/{deliveryCode}")]
+    [Authorize]
+    public async Task<IActionResult> UpdateStatus(string deliveryCode)
+    {
+        try
+        {
+          
+
+            var req = await _deliveryService.UpdateStatusDelivery(deliveryCode);
+            return Ok(new
+            {
+                message = "Change Status Successfuly",
+                DeliveredStatus = req
+            });
+        }
+        catch (Exception e)
+        {
+            var errorMessage = e.Message;
+            if (e.InnerException != null)
+                errorMessage += " | Inner: " + e.InnerException.Message;
+
+            return BadRequest(errorMessage);
+            
+        }
+    }
 }

@@ -29,6 +29,12 @@ public class ProductionService : IProductionOrderService
                 throw new Exception($"RequestOrder with code {requestNumber} not found");
             }
 
+            if (requestOrder.Status == "InProduction" || requestOrder.Status == "Completed")
+            {
+                throw new Exception($"RequestOrder with code {requestNumber} was in Production or Completed");
+
+            }
+
             int itemid = requestOrder.ItemId;
             var fg = await _context.ItemMasters.Include(u => u.Inventories)
                 .FirstOrDefaultAsync(i => i.ItemId == itemid && i.ItemType == "FinishedGoods");
@@ -57,8 +63,8 @@ public class ProductionService : IProductionOrderService
                     .Select(i => i.ItemName)
                     .FirstOrDefaultAsync() ?? m.ItemID.ToString();
 
-                if (available < (int)m.QuantityUsed)
-                    throw new Exception($"Stok tidak cukup untuk item {itemName}. Butuh {(int)m.QuantityUsed}, tersedia {available}.");
+                if (available < m.QuantityUsed)
+                    throw new Exception($"Stok tidak cukup untuk item {itemName}. Butuh {m.QuantityUsed}, tersedia {available}.");
             }
 
             var prodCount = await _context.Productions.CountAsync();
@@ -85,10 +91,10 @@ public class ProductionService : IProductionOrderService
                 {
                     ProductionId = prod.ProductionId,
                     RawMaterialItemId = m.ItemID,
-                    QuantityUsed = (int)m.QuantityUsed
+                    QuantityUsed = m.QuantityUsed
                 });
 
-                var qtyToTake = (int)m.QuantityUsed;
+                var qtyToTake = m.QuantityUsed;
                 var fifoBatches = await _context.Inventories
                     .Where(b => b.ItemId == m.ItemID && (b.Quantity ?? 0) > 0)
                     .OrderBy(b => b.DateIn)
@@ -103,33 +109,34 @@ public class ProductionService : IProductionOrderService
                     var available = batch.Quantity ?? 0;
                     if (available <= 0) continue;
 
-                    var take = Math.Min(available, qtyToTake);
+                    var take = Math.Min((decimal)available, qtyToTake);
 
                     batch.Quantity = available - take;
                     batch.UpdateAt = currentTime;
 
-                    materialCostForThisItem += (batch.UnitCost ?? 0) * take;
+                    var unitCost = batch.UnitCost ?? 0;
+                    materialCostForThisItem += unitCost * take;
                     qtyToTake -= take;
-                    
+
+                    var invOut = new InventoryOut
+                    {
+                        InventoryId = batch.InventoryId, 
+                        QuantityUsed = take,
+                        DateOut = currentTime,
+                        DestinationType = "Production",
+                        UserId = userId,
+                        ReferenceNo = prodRef,
+                        UnitCost = unitCost
+                    };
+                    _context.InventoryOuts.Add(invOut);
                 }
-                
 
                 if (qtyToTake > 0)
                     throw new Exception($"FIFO error: stok tidak cukup untuk ItemID {m.ItemID}");
 
                 totalMaterialCost += materialCostForThisItem;
-
-                var invOut = new InventoryOut
-                {
-                    QuantityUsed = (int)m.QuantityUsed,
-                    DateOut = currentTime,
-                    DestinationType = "Production",
-                    UserId = userId,
-                    ReferenceNo = prodRef,
-                    UnitCost = materialCostForThisItem / (int)m.QuantityUsed
-                };
-                _context.InventoryOuts.Add(invOut);
             }
+
 
             var producedQty = requestOrder.Quantity;
             var fgUnitCost = producedQty > 0 ? Math.Round(totalMaterialCost / producedQty, 2) : 0m;

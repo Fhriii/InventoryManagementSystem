@@ -11,7 +11,7 @@ public partial class ProductionMaterialUsage
 
     public int RawMaterialItemId { get; set; }
 
-    public int QuantityUsed { get; set; }
+    public decimal QuantityUsed { get; set; }
 
     public virtual Production Production { get; set; } = null!;
 

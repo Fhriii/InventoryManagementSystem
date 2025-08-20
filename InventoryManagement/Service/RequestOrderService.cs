@@ -8,6 +8,7 @@ public interface IRequestOrderService
 {
     Task<dynamic> CreateRequestAsync(RequestOrders.RequestDto dto, int userId);
     Task<dynamic> CreateRequestExistAsync(RequestOrders.RequestOrderItemExist dto, int userId);
+    Task<dynamic> UpdateStatusRequest(string requestCode);
 }
 
 public class RequestOrderService : IRequestOrderService
@@ -91,7 +92,7 @@ public class RequestOrderService : IRequestOrderService
             {
                 RequestId = request.RequestId,
                 ItemId = rawItem.ItemId,
-                Quantity = (int)raw.Quantity
+                Quantity = raw.Quantity
             });
         }
 
@@ -100,97 +101,131 @@ public class RequestOrderService : IRequestOrderService
         {
             message = "Request Order Created",
             statusStock = statusStockItem,
-            requestId = request.RequestId
+            requestNo = request.RequestNumber,
         };
     }
 
     public async Task<dynamic> CreateRequestExistAsync(RequestOrders.RequestOrderItemExist dto, int userId)
     {
-        decimal weightedAvgPrice;
-        decimal totalUnitCost = 0;
-        List<string> stockMessages = new();
-        int rawStock = 0;
-        int totalNeeded = 0;
-        var itemMaster = await _context.ItemMasters.FirstOrDefaultAsync(u => u.ItemCode == dto.ItemCode);
-        if (itemMaster == null) throw new Exception("Item tidak ditemukan.");
-
-        var reqcount = await _context.RequestOrders.CountAsync();
-        var request = new RequestOrder
-        {
-            RequestNumber = $"REQ00{reqcount}/{DateTime.Now.Year}",
-            UserId = userId,
-            RequestDate = DateTime.UtcNow,
-            Status = "Pending",
-            CustomerName = dto.CustomerName,
-            CustomerPhone = dto.CustomerPhone,
-            ItemId = itemMaster.ItemId,
-            Quantity = dto.Quantity
-        };
-        _context.RequestOrders.Add(request);
-        await _context.SaveChangesAsync();
-
-        var bomList = await _context.BillOfMaterials
-            .Where(b => b.FinishedGoodId == itemMaster.ItemId)
-            .ToListAsync();
-
-        if (!bomList.Any())
-            throw new Exception("BOM untuk produk ini tidak ditemukan.");
-
-        foreach (var bom in bomList)
-        {
-            totalNeeded = (int)bom.QuantityRequired * dto.Quantity;
-
-            rawStock = (int)await _context.Inventories
-                .Where(i => i.ItemId == bom.RawMaterialId)
-                .SumAsync(i => i.Quantity);
-
-            if (rawStock < totalNeeded)
-            {
-                stockMessages.Add(
-                    $"Stok raw material {bom.RawMaterialId} tidak cukup. Tersedia: {rawStock}, Butuh: {totalNeeded} {itemMaster.ItemId}");
-                throw new Exception($"Stok raw material {bom.RawMaterialId} tidak cukup. Tersedia: {rawStock}, Butuh: {totalNeeded} {itemMaster.ItemId}");
-            }
-
+        using var transaction = await _context.Database.BeginTransactionAsync();
         
+        try
+        {
+            decimal weightedAvgPrice;
+            decimal totalUnitCost = 0;
+            List<string> stockMessages = new();
+            decimal? rawStock = 0;
+            decimal totalNeeded = 0;
+            
+            var itemMaster = await _context.ItemMasters.FirstOrDefaultAsync(u => u.ItemCode == dto.ItemCode);
+            if (itemMaster == null) throw new Exception("Item tidak ditemukan.");
 
-            var invData = await _context.Inventories
-                .Where(i => i.ItemId == bom.RawMaterialId && i.Quantity > 0)
+            var reqcount = await _context.RequestOrders.CountAsync();
+            var request = new RequestOrder
+            {
+                RequestNumber = $"REQ00{reqcount}/{DateTime.Now.Year}",
+                UserId = userId,
+                RequestDate = DateTime.UtcNow,
+                Status = "Pending",
+                CustomerName = dto.CustomerName,
+                CustomerPhone = dto.CustomerPhone,
+                ItemId = itemMaster.ItemId,
+                Quantity = dto.Quantity
+            };
+            
+            _context.RequestOrders.Add(request);
+            await _context.SaveChangesAsync(); 
+
+            var bomList = await _context.BillOfMaterials
+                .Where(b => b.FinishedGoodId == itemMaster.ItemId)
                 .ToListAsync();
 
-            if (!invData.Any())
+            if (!bomList.Any())
+                throw new Exception("BOM untuk produk ini tidak ditemukan.");
+
+            var requestOrderDetails = new List<RequestOrderDetail>();
+
+            foreach (var bom in bomList)
             {
-                // Tambahkan pesan error yang lebih informatif
-                stockMessages.Add($"Tidak ada stok untuk raw material ID {bom.RawMaterialId} (Item ID {bom.RawMaterialId})");
-                continue; // Lewati item ini atau throw exception
+                totalNeeded = bom.QuantityRequired * dto.Quantity;
+
+                rawStock = await _context.Inventories
+                    .Where(i => i.ItemId == bom.RawMaterialId)
+                    .SumAsync(i => i.Quantity);
+
+                if (rawStock < totalNeeded)
+                {
+                    var errorMsg = $"Stok raw material {bom.RawMaterialId} tidak cukup. Tersedia: {rawStock}, Butuh: {totalNeeded}";
+                    stockMessages.Add(errorMsg);
+                    throw new Exception(errorMsg);
+                }
+
+                var invData = await _context.Inventories
+                    .Where(i => i.ItemId == bom.RawMaterialId && i.Quantity > 0)
+                    .ToListAsync();
+
+                if (!invData.Any())
+                {
+                    stockMessages.Add($"Tidak ada stok untuk raw material ID {bom.RawMaterialId}");
+                    continue;
+                }
+
+                var totalCost = invData.Sum(x => x.Quantity * x.UnitCost);
+                var totalQty = invData.Sum(x => x.Quantity);
+
+                weightedAvgPrice = (decimal)(totalCost / totalQty);
+                totalUnitCost += bom.QuantityRequired * weightedAvgPrice;
+
+                requestOrderDetails.Add(new RequestOrderDetail
+                {
+                    RequestId = request.RequestId,
+                    ItemId = bom.RawMaterialId,
+                    Quantity = totalNeeded,
+                    UnitPrice = weightedAvgPrice
+                });
             }
 
-            var totalCost = invData.Sum(x => x.Quantity * x.UnitCost);
-            var totalQty = invData.Sum(x => x.Quantity);
-
-            weightedAvgPrice = (decimal)(totalCost / totalQty);
-
-            totalUnitCost += bom.QuantityRequired * weightedAvgPrice;
-
-            _context.RequestOrderDetails.Add(new RequestOrderDetail
+            if (requestOrderDetails.Any())
             {
-                RequestId = request.RequestId,
-                ItemId = bom.RawMaterialId,
-                Quantity = totalNeeded,
-                UnitPrice = weightedAvgPrice
-            });
-            
+                _context.RequestOrderDetails.AddRange(requestOrderDetails);
+                await _context.SaveChangesAsync();
+            }
+
+            await transaction.CommitAsync();
+
+            return new
+            {
+                message = "Request Order Created",
+                statusStock = stockMessages.Any() 
+                    ? string.Join("; ", stockMessages) 
+                    : $"Stok Cukup, Tersedia: {rawStock}, Butuh: {totalNeeded}",
+                requestNo = request.RequestNumber,
+            };
+        }
+        catch (Exception)
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<dynamic> UpdateStatusRequest(string requestCode)
+    {
+        string requestNumber = System.Net.WebUtility.UrlDecode(requestCode);
+        var requestOrder = await _context.RequestOrders.FirstOrDefaultAsync(u => u.RequestNumber == requestNumber);
+        if (requestOrder == null)
+        {
+            throw new Exception($"RequestOrder with code {requestNumber} not found");
         }
 
-        decimal productionCost = 1000000;
-
-        await _context.SaveChangesAsync();
-
-        return new
+        try
         {
-            message = "Request Order Created",
-            statusStock = stockMessages.Any() ? string.Join("; ", stockMessages) : $"Stok Cukup ,Tersedia: {rawStock}, Butuh: {totalNeeded} {itemMaster.ItemId}",
-            requestId = request.RequestId,
-       
-        };
+            requestOrder.Status = "Canceled";
+            await _context.SaveChangesAsync();
+            return requestOrder.Status;
+        }catch(Exception e)
+        {
+            throw new Exception(e.Message);
+        }
     }
 }

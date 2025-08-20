@@ -7,7 +7,7 @@ public partial class Inventory
 {
     public int InventoryId { get; set; }
 
-    public int? Quantity { get; set; }
+    public decimal? Quantity { get; set; }
 
     public int? ItemId { get; set; }
 

@@ -80,4 +80,31 @@ public class RequestOrderController : ControllerBase
             
         }
     }
+
+    [HttpPost("CancelRequest/{requestCode}")]
+    [Authorize]
+    public async Task<IActionResult> CancelRequest(string requestCode)
+    {
+        try
+        {
+          
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+
+            var req = await _requestOrderService.UpdateStatusRequest(requestCode);
+            return Ok(new
+            {
+                message = "Cancel Request Successfuly",
+                RequestId = req
+            });
+        }
+        catch (Exception e)
+        {
+            var errorMessage = e.Message;
+            if (e.InnerException != null)
+                errorMessage += " | Inner: " + e.InnerException.Message;
+
+            return BadRequest(errorMessage);
+            
+        }
+    }
 }

@@ -11,7 +11,7 @@ public partial class InventoryOut
 
     public decimal? UnitCost { get; set; }
 
-    public int QuantityUsed { get; set; }
+    public decimal QuantityUsed { get; set; }
 
     public DateTime DateOut { get; set; }
 

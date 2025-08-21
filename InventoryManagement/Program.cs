@@ -39,7 +39,15 @@ builder.Services.AddScoped<IItemMasterService,ItemMasterService>();
 builder.Services.AddScoped<IProductionOrderService,ProductionService>();
 builder.Services.AddScoped<IDeliveryService,DeliveryService>();
 
-
+builder.Services.AddCors(options=>
+{
+    options.AddPolicy("AllowAll",
+      policy  =>
+      {
+          policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin();
+      }
+    );
+});
 builder.Services.AddSwaggerGen(s =>
 {
     s.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme()
@@ -76,8 +84,11 @@ if (OperatingSystem.IsWindows())
 {
     app.UseHttpsRedirection();
 }
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseHttpsRedirection();
-
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.Run();

@@ -9,6 +9,7 @@ public interface IPurchaseService
     Task<int> CreatePurchaseOrderAsync(Purchase.PurchaseOrderDto dto,int userid);
     Task<int> CreatePurchaseOrderItemExistAsync(Purchase.PurchaseOrderExist dto,int userid);
     Task<Purchase.PurchaseOrderDto> GetPurchaseOrderAsync(int purchaseOrderId);
+    Task<dynamic> UpdateStatus(string PONumber);
 
 
 }
@@ -217,7 +218,26 @@ public class PurchaseService : IPurchaseService
 
         return dto;
     }
-    
+    public async Task<dynamic> UpdateStatus(string poNumber)
+    {
+        string ponum = System.Net.WebUtility.UrlDecode(poNumber);
+        var purchaseOrder = await _context.PurchaseOrders.FirstOrDefaultAsync(u => u.Ponumber == ponum);
+        if (purchaseOrder == null)
+        {
+            throw new Exception($"Purchase Order with code {ponum} not found");
+        }
+
+        try
+        {
+            purchaseOrder.Status = "Received";
+            await _context.SaveChangesAsync();
+            return purchaseOrder.Status;
+                
+        }catch(Exception e)
+        {
+            throw new Exception(e.Message);
+        }
+    }
 }
 
  

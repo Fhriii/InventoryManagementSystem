@@ -14,20 +14,17 @@ RUN apt-get update && apt-get install -y \
     libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 # Copy csproj dulu
-COPY InventoryManagement.csproj ./
+COPY ./InventoryManagement/InventoryManagement.csproj ./
 
 # Restore dependencies
-RUN dotnet restore "InventoryManagement.csproj" --disable-parallel /v:detailed
+RUN dotnet restore ".\InventoryManagement.csproj" --disable-parallel /v:detailed
 
 # Copy semua source code
 COPY . .
 
-# Build
-RUN dotnet build "InventoryManagement.csproj" -c $BUILD_CONFIGURATION -o /app/build
-
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "InventoryManagement.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./InventoryManagement/InventoryManagement.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app

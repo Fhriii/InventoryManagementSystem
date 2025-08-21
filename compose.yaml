@@ -1,44 +1,44 @@
-﻿#version: '3.8'
-#
-#services:
-#  # SQL Server Database
-#  sqlserver:
-#    build: ./InventoryManagement/Db 
-#    container_name: inventory_sqlserver
-#    environment:
-#      ACCEPT_EULA: "Y"
-#      MSSQL_SA_PASSWORD: "Fahri@2024!"
-#      MSSQL_PID: "Developer"
-#    ports:
-#      - "1433:1433"
-#    volumes:
-#      - sqlserver_data:/var/opt/mssql
-#    networks:
-#      - inventory_network
-#    restart: unless-stopped
-#
-#  # ASP.NET Core API
-#  inventorymanagement:
-#    build:
-#      context: .
-#      dockerfile: InventoryManagement/Dockerfile
-#    container_name: inventory_api
-#    ports:
-#      - "5000:8080"
-#      - "5001:8081"
-#    environment:
-#      ASPNETCORE_ENVIRONMENT: "Development"
-#      ASPNETCORE_URLS: "http://+:8080;https://+:8081"
-#      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=InventoryManagement;User Id=sa;Password=Fahri@2024!;TrustServerCertificate=true;"
-#    depends_on:
-#      - sqlserver
-#    networks:
-#      - inventory_network
-#    restart: unless-stopped
-#
-#volumes:
-#  sqlserver_data:
-#
-#networks:
-#  inventory_network:
-#    driver: bridge
+﻿version: '3.8'
+
+services:
+  # SQL Server Database
+  invdb:
+    build: ./InventoryManagement/Db 
+    container_name: inventory_sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Fahri@2024!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+  # ASP.NET Core API
+  inventorymanagement:
+    build:
+      context: .
+      dockerfile: InventoryManagement/Dockerfile
+    container_name: inventory_api
+    ports:
+      - "8080:8080"
+      
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Server=invdb,1433;Database=InventoryManagement;User Id=sa;Password=Fahri@2024!;TrustServerCertificate=true;"
+    depends_on:
+      - invdb
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
+
+networks:
+  inventory_network:
+    driver: bridge

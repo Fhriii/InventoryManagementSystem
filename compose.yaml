@@ -2,13 +2,13 @@
 
 services:
   # SQL Server Database
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+  invdb:
+    build: ./InventoryManagement/Db 
     container_name: inventory_sqlserver
     environment:
-      ACCEPT_EULA: Y
-      MSSQL_SA_PASSWORD: YourStrong@Password123
-      MSSQL_PID: Developer
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Fahri@2024!"
+      MSSQL_PID: "Developer"
     ports:
       - "1433:1433"
     volumes:
@@ -19,28 +19,25 @@ services:
 
   # ASP.NET Core API
   inventorymanagement:
-    image: inventorymanagement
-    container_name: inventory_api
     build:
       context: .
       dockerfile: InventoryManagement/Dockerfile
-      network: host
+    container_name: inventory_api
     ports:
-      - "5000:8080"
-      - "5001:8081"
+      - "8080:8080"
+      
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:8080;https://+:8081
-      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=InventoryManagementDB;User Id=sa;Password=YourStrong@Password123;TrustServerCertificate=true;
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Server=invdb,1433;Database=InventoryManagement;User Id=sa;Password=Fahri@2024!;TrustServerCertificate=true;"
     depends_on:
-      - sqlserver
+      - invdb
     networks:
       - inventory_network
     restart: unless-stopped
 
 volumes:
   sqlserver_data:
-    driver: local
 
 networks:
   inventory_network:

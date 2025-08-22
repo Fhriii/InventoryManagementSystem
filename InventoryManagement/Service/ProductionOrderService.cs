@@ -156,7 +156,7 @@ public class ProductionService : IProductionOrderService
 
             var existingFgInventory = await _context.Inventories
                 .FirstOrDefaultAsync(i => i.ItemId == fg.ItemId);
-
+            var invcount = await _context.Inventories.CountAsync();
             if (existingFgInventory != null)
             {
                 existingFgInventory.Quantity = (existingFgInventory.Quantity ?? 0) + producedQty;
@@ -169,7 +169,7 @@ public class ProductionService : IProductionOrderService
                     ItemId = fg.ItemId,
                     Quantity = producedQty,
                     UnitCost = fgUnitCost,
-                    BatchNumber = $"BATCH-{fg.ItemCode}-{DateTime.Now:yyyyMMddHHmmss}",
+                    BatchNumber = $"BATCH-{invcount +1}",
                     DateIn = currentTime,
                     UpdateAt = currentTime
                 };

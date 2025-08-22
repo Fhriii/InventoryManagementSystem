@@ -5,7 +5,7 @@ sambungin semua menggunakan network
 
 
 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Fahri@2024!" -C -d InventoryManagement -Q "
-INSERT INTO Users (Username, Password, FullName, Role, IsActive)
+INSERT INTO Users (Username, Password, FullName, Role, IsActive) VALUES
 ('admin', 'admin123', 'Administrator', 'Admin', 1),
 ('fahri', 'fahri', 'Fahri User', 'Staff', 1),
 ('john', 'john', 'John Doe', 'Staff', 1)

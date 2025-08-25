@@ -87,8 +87,4 @@ if (OperatingSystem.IsWindows())
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
 app.Run();

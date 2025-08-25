@@ -33,14 +33,6 @@ public class ItemMasterService : IItemMasterService
             })
             .ToListAsync();
 
-        foreach (var item in itemMasterList)
-        {
-            if (item.CurrentStock < item.MinStock)
-            {
-                item.Description += " (Stock below minimum)";
-            }
-        }
-
         return itemMasterList;
     }
     public async Task<ItemMasterDto> AddItem(ItemMasterDto dto)
@@ -58,16 +50,7 @@ public class ItemMasterService : IItemMasterService
             .AnyAsync(i => i.ItemCode == dto.ItemCode);
         if (exists)
             throw new InvalidOperationException($"Item with code '{dto.ItemCode}' already exists.");
-
-        if (dto.CurrentStock < 0)
-            throw new ArgumentOutOfRangeException(nameof(dto.CurrentStock), "CurrentStock cannot be negative.");
-
-        if (dto.MinStock < 0)
-            throw new ArgumentOutOfRangeException(nameof(dto.MinStock), "MinStock cannot be negative.");
-
-        if (dto.MinStock > dto.CurrentStock)
-            throw new ArgumentException("MinStock cannot be greater than CurrentStock.");
-
+        
         // Save new item
         var newItem = new ItemMaster
         {

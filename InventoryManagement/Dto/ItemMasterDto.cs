@@ -12,10 +12,6 @@ public class ItemMasterDto
 
     public string Unit { get; set; } = null!;
 
-    public int? CurrentStock { get; set; }
-
-    public int MinStock { get; set; }
-
     public string? Description { get; set; }
     
     

@@ -3,7 +3,9 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using WebApplication1.Dto;
 using WebApplication1.Models;
 
 namespace WebApplication1.Controllers;
@@ -72,6 +74,46 @@ public class AuthController : ControllerBase
             username = username,
             role = role
         });
+    }
+
+    [HttpPost("register")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> register([FromBody]Register dto)
+    {
+        if (dto.role != "Admin" && dto.role != "Staff")
+        {   
+            return BadRequest("Role must Admin or Staff");
+        }
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == dto.username);
+        if (user != null)
+        {
+            return BadRequest("Username is used");
+        }
+        var newUser = new User
+        {
+            Username = dto.username,
+            FullName = dto.fullname,
+            Password = dto.password,
+            IsActive = true,
+            Role = dto.role,
+            CreatedAt = DateTime.Now
+        };
+        try
+        {
+            _context.Users.Add(newUser);
+            await _context.SaveChangesAsync();
+            return Ok(new
+            {
+                Username = newUser.Username,
+                FullName = newUser.FullName,
+                Role = newUser.Role,
+                Password = newUser.Password
+            });
+        }
+        catch(Exception e){
+            return BadRequest(e.Message);
+        }
     }
 }
 public record LoginDto(string name ,string password);

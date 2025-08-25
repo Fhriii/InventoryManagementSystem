@@ -38,8 +38,6 @@ public class DeliveryController : ControllerBase
     {
         try
         {
-          
-
             var req = await _deliveryService.UpdateStatusDelivery(deliveryCode);
             return Ok(new
             {
